@@ -1,122 +1,176 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { LoaderCircle, CircleAlert } from "lucide-react";
+import {
+  getHabits,
+  getCheckins,
+  createHabit,
+  updateHabit,
+  deleteHabit,
+  toggleCheckin,
+} from "./services/api";
+import { toDateKey } from "./utils/dates";
+import { enrichHabits, calcOverview, countsByDate } from "./utils/stats";
+import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
+import HabitForm from "./components/HabitForm";
+import Toast from "./components/Toast";
+import Dashboard from "./pages/Dashboard";
+import AllHabits from "./pages/AllHabits";
+import CalendarPage from "./pages/CalendarPage";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [view, setView] = useState("dashboard");
+  const [habits, setHabits] = useState([]);
+  const [checkins, setCheckins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [formState, setFormState] = useState({ open: false, habit: null });
+  const [toast, setToast] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ message, type, id: Date.now() });
+  }, []);
+
+  const closeToast = useCallback(() => setToast(null), []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [habitData, checkinData] = await Promise.all([getHabits(), getCheckins()]);
+      setHabits(habitData);
+      setCheckins(checkinData);
+    } catch (error) {
+      setLoadError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const enriched = useMemo(() => enrichHabits(habits, checkins), [habits, checkins]);
+  const overview = useMemo(() => calcOverview(enriched), [enriched]);
+  const counts = useMemo(() => countsByDate(checkins), [checkins]);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return enriched.filter(
+      (h) =>
+        h.name.toLowerCase().includes(term) &&
+        (category === "All" || h.category === category)
+    );
+  }, [enriched, search, category]);
+
+  async function handleToggle(habit) {
+    setBusyId(habit._id);
+    try {
+      const today = toDateKey();
+      const result = await toggleCheckin(habit._id, today);
+      setCheckins((prev) => {
+        const without = prev.filter(
+          (c) => !(String(c.habit) === habit._id && c.date === today)
+        );
+        return result.checked ? [...without, { habit: habit._id, date: today }] : without;
+      });
+      showToast(result.checked ? `${habit.name} marked as done` : `${habit.name} marked as undone`);
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleSave(data) {
+    if (formState.habit) {
+      const updated = await updateHabit(formState.habit._id, data);
+      setHabits((prev) => prev.map((h) => (h._id === updated._id ? updated : h)));
+      showToast("Habit updated successfully");
+    } else {
+      const created = await createHabit(data);
+      setHabits((prev) => [...prev, created]);
+      showToast("Habit added successfully");
+    }
+    setFormState({ open: false, habit: null });
+  }
+
+  async function handleDelete(habit) {
+    const sure = window.confirm(
+      `Delete "${habit.name}"? All its check-ins will be removed too.`
+    );
+    if (!sure) return;
+    try {
+      await deleteHabit(habit._id);
+      setHabits((prev) => prev.filter((h) => h._id !== habit._id));
+      setCheckins((prev) => prev.filter((c) => String(c.habit) !== habit._id));
+      showToast("Habit deleted");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  const listProps = {
+    habits: filtered,
+    totalCount: habits.length,
+    category,
+    onCategoryChange: setCategory,
+    onAdd: () => setFormState({ open: true, habit: null }),
+    onToggle: handleToggle,
+    onEdit: (habit) => setFormState({ open: true, habit }),
+    onDelete: handleDelete,
+    busyId,
+  };
+
+  let content;
+  if (loading) {
+    content = (
+      <div className="card state-box">
+        <LoaderCircle size={32} className="spin" />
+        <p>Loading your habits...</p>
+      </div>
+    );
+  } else if (loadError) {
+    content = (
+      <div className="card state-box error-box">
+        <CircleAlert size={32} />
+        <p>{loadError}</p>
+        <button className="btn btn-primary" onClick={loadData}>
+          Try again
+        </button>
+      </div>
+    );
+  } else if (view === "dashboard") {
+    content = <Dashboard overview={overview} counts={counts} listProps={listProps} />;
+  } else if (view === "habits") {
+    content = <AllHabits listProps={listProps} />;
+  } else {
+    content = <CalendarPage habits={habits} checkins={checkins} counts={counts} />;
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-shell">
+      <Sidebar view={view} onChange={setView} />
+      <main className="main">
+        <Header search={search} onSearch={setSearch} showSearch={view !== "calendar"} />
+        {content}
+      </main>
 
-      <div className="ticks"></div>
+      {formState.open && (
+        <HabitForm
+          habit={formState.habit}
+          onSave={handleSave}
+          onCancel={() => setFormState({ open: false, habit: null })}
+        />
+      )}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {toast && (
+        <Toast key={toast.id} message={toast.message} type={toast.type} onClose={closeToast} />
+      )}
+    </div>
+  );
 }
-
-export default App

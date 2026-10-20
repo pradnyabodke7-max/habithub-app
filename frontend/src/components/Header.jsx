@@ -1,0 +1,47 @@
+import { Search, X } from "lucide-react";
+
+const USER_NAME = "Pradnya";
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+export default function Header({ search, onSearch, showSearch }) {
+  return (
+    <header className="header">
+      <div>
+        <h1>
+          {greeting()}, {USER_NAME}!
+        </h1>
+        <p>Consistency beats intensity. Keep showing up every day.</p>
+      </div>
+
+      <div className="header-right">
+        {showSearch && (
+          <div className="search-box">
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Search habits..."
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                className="icon-btn"
+                aria-label="Clear search"
+                onClick={() => onSearch("")}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
+        <div className="avatar">{USER_NAME[0]}</div>
+      </div>
+    </header>
+  );
+}
