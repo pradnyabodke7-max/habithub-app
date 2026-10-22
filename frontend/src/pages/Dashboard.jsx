@@ -1,5 +1,6 @@
 import StatsCards from "../components/StatsCards";
 import HabitList from "../components/HabitList";
+import MotivationCard from "../components/MotivationCard";
 import Heatmap from "../components/Heatmap";
 
 export default function Dashboard({ overview, counts, listProps }) {
@@ -7,6 +8,7 @@ export default function Dashboard({ overview, counts, listProps }) {
     <>
       <StatsCards overview={overview} />
       <HabitList title="My Habits" {...listProps} />
+      <MotivationCard overview={overview} />
       <section className="card">
         <div className="card-head">
           <div>
