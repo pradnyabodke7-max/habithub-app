@@ -1,7 +1,5 @@
 import { Search, X } from "lucide-react";
 
-const USER_NAME = "Pradnya";
-
 function greeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -9,18 +7,20 @@ function greeting() {
   return "Good evening";
 }
 
-export default function Header({ search, onSearch, showSearch }) {
+export default function Header({ name, search, onSearch, showSearch }) {
+  const displayName = name ? name[0].toUpperCase() + name.slice(1) : "";
+
   return (
     <header className="header">
       <div>
         <h1>
-          {greeting()}, {USER_NAME}!
+          {greeting()}, {displayName}!
         </h1>
         <p>Consistency beats intensity. Keep showing up every day.</p>
       </div>
 
-      <div className="header-right">
-        {showSearch && (
+      {showSearch && (
+        <div className="header-right">
           <div className="search-box">
             <Search size={16} />
             <input
@@ -39,9 +39,8 @@ export default function Header({ search, onSearch, showSearch }) {
               </button>
             )}
           </div>
-        )}
-        <div className="avatar">{USER_NAME[0]}</div>
-      </div>
+        </div>
+      )}
     </header>
   );
 }

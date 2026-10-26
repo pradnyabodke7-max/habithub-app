@@ -7,18 +7,23 @@ import {
   updateHabit,
   deleteHabit,
   toggleCheckin,
+  TOKEN_KEY,
+  USER_KEY,
 } from "./services/api";
 import { toDateKey } from "./utils/dates";
 import { enrichHabits, calcOverview, countsByDate } from "./utils/stats";
-import Sidebar from "./components/Sidebar";
+import TopNav from "./components/TopNav";
 import Header from "./components/Header";
 import HabitForm from "./components/HabitForm";
 import Toast from "./components/Toast";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import AllHabits from "./pages/AllHabits";
 import CalendarPage from "./pages/CalendarPage";
+import StreaksPage from "./pages/StreaksPage";
+import WeeklyPage from "./pages/WeeklyPage";
 
-export default function App() {
+function HabitApp({ user, onLogout }) {
   const [view, setView] = useState("dashboard");
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
@@ -66,6 +71,15 @@ export default function App() {
         (category === "All" || h.category === category)
     );
   }, [enriched, search, category]);
+
+  function handleMenuAction(action) {
+    if (action.type === "add") {
+      setFormState({ open: true, habit: null });
+      return;
+    }
+    setView(action.view);
+    if (action.category) setCategory(action.category);
+  }
 
   async function handleToggle(habit) {
     setBusyId(habit._id);
@@ -148,15 +162,30 @@ export default function App() {
     content = <Dashboard overview={overview} counts={counts} listProps={listProps} />;
   } else if (view === "habits") {
     content = <AllHabits listProps={listProps} />;
+  } else if (view === "streaks") {
+    content = <StreaksPage habits={enriched} />;
+  } else if (view === "weekly") {
+    content = <WeeklyPage habits={enriched} overview={overview} />;
   } else {
     content = <CalendarPage habits={habits} checkins={checkins} counts={counts} />;
   }
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} onChange={setView} />
+      <TopNav
+        view={view}
+        category={category}
+        user={user}
+        onAction={handleMenuAction}
+        onLogout={onLogout}
+      />
       <main className="main">
-        <Header search={search} onSearch={setSearch} showSearch={view !== "calendar"} />
+        <Header
+          name={user.name}
+          search={search}
+          onSearch={setSearch}
+          showSearch={view === "dashboard" || view === "habits"}
+        />
         {content}
       </main>
 
@@ -173,4 +202,33 @@ export default function App() {
       )}
     </div>
   );
+}
+
+export default function App() {
+  const [user, setUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem(USER_KEY);
+      return localStorage.getItem(TOKEN_KEY) && raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  });
+
+  function handleLogin(data) {
+    localStorage.setItem(TOKEN_KEY, data.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    setUser(data.user);
+  }
+
+  function handleLogout() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setUser(null);
+  }
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  return <HabitApp user={user} onLogout={handleLogout} />;
 }
